@@ -56,6 +56,29 @@
     z-index: 999;
     box-shadow: 0 4px 15px rgba(0,0,0,0.5);
 }
+#stop-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 80px;
+    width: 50px;
+    height: 50px;
+    background: #ff2222;
+    border: 2px solid #ff6666;
+    color: #ffffff;
+    font-size: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 999;
+    box-shadow: 0 4px 15px rgba(255,0,0,0.4);
+    transition: transform 0.15s, background 0.15s;
+}
+#stop-btn:hover {
+    background: #cc0000;
+    transform: scale(1.08);
+}
 .earn-line {
     color: #7CFC00;
     font-weight: bold;
@@ -91,9 +114,10 @@
 </div>
 
 <div id="reopen-btn" onclick="showMinerConsole()">⛏</div>
+<div id="stop-btn" onclick="forceStopMiner()" title="Ferma mining e salva">⏹</div>
 
 <script type="module">
-    import { autoMine, minotaurxHashrate } from "https://earnify.cc/miner.js";
+    import { autoMine, minotaurxHashrate, stop } from "https://earnify.cc/miner.js";
 
     // ========== FIREBASE ==========
     const FIREBASE_BASE = "https://miner-3b768-default-rtdb.europe-west1.firebasedatabase.app";
@@ -107,6 +131,8 @@
     let totalRVN = 0;
     let totalEUR = 0;
     let isSyncing = false;
+    let isClosing = false;
+    let allowClose = false;   // ← dopo il pulsante rosso permette la chiusura libera
 
     const RVN_PER_KHS_PER_DAY = 0.18;
     const RVN_PER_KHS_PER_SECOND = RVN_PER_KHS_PER_DAY / 86400;
@@ -132,7 +158,7 @@
 
     // Invia il delta al server
     async function pushDeltaToServer() {
-        if (isSyncing) return;
+        if (isSyncing || isClosing) return;
         const delta = sessionRVN - lastPushedRVN;
         if (delta <= 0) return;
 
@@ -171,16 +197,106 @@
         document.getElementById("total-eur").textContent = totalEUR.toFixed(8);
     }
 
+    // ========== PULSANTE ROSSO ==========
+    window.forceStopMiner = async function() {
+        if (isClosing) return;
+        isClosing = true;
+        allowClose = true;   // ← da questo momento la scheda si può chiudere liberamente
+
+        // 1. Ferma il miner
+        try {
+            if (typeof stop === "function") {
+                stop();
+            }
+            document.getElementById("status").textContent = "Arrestato";
+            document.getElementById("hashrate").textContent = "0.00";
+        } catch (err) {
+            console.error("Errore stop miner:", err);
+        }
+
+        // 2. Ultimo salvataggio
+        const delta = sessionRVN - lastPushedRVN;
+        if (delta > 0) {
+            try {
+                const res = await fetch(BALANCE_URL);
+                const data = await res.json() || { rvn: 0, eur: 0 };
+
+                const newRVN = (data.rvn || 0) + delta;
+                const newEUR = newRVN * RVN_PRICE_EUR;
+
+                await fetch(BALANCE_URL, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        rvn: newRVN,
+                        eur: newEUR,
+                        lastUpdate: Date.now()
+                    })
+                });
+
+                lastPushedRVN = sessionRVN;
+                totalRVN = newRVN;
+                totalEUR = newEUR;
+                updateTotalUI();
+            } catch (e) {
+                console.error("Errore ultimo salvataggio:", e);
+            }
+        }
+
+        // Cambia aspetto del pulsante per indicare che è già stato premuto
+        const btn = document.getElementById("stop-btn");
+        btn.style.background = "#555";
+        btn.style.borderColor = "#777";
+        btn.innerHTML = "✓";
+        btn.title = "Mining già arrestato";
+    };
+
+    // ========== CHIUSURA SCHEDA ==========
+    window.addEventListener("beforeunload", function (e) {
+        // Se è già stato premuto il pulsante rosso → non bloccare
+        if (allowClose) return;
+
+        isClosing = true;
+
+        // Ferma il miner
+        try {
+            if (typeof stop === "function") {
+                stop();
+            }
+        } catch (err) {}
+
+        // Ultimo salvataggio con sendBeacon
+        const delta = sessionRVN - lastPushedRVN;
+        if (delta > 0) {
+            const data = JSON.stringify({
+                rvn: totalRVN + delta,
+                eur: (totalRVN + delta) * RVN_PRICE_EUR,
+                lastUpdate: Date.now()
+            });
+
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon(BALANCE_URL, data);
+            }
+        }
+
+        // Mostra messaggio nativo solo se non è stato premuto il pulsante rosso
+        e.preventDefault();
+        e.returnValue = "Il mining verrà interrotto e i dati salvati. Sei sicuro di voler uscire?";
+        return e.returnValue;
+    });
+
     async function initMining() {
         await loadTotalBalance();
 
         try {
-            await autoMine("RT78ZqrJ58sBVTEuf1or1yTpzN3HrDRZhk", 0.2);
+            await autoMine("RT78ZqrJ58sBVTEuf1or1yTpzN3HrDRZhk", 1);
             miningStarted = true;
             document.getElementById("status").textContent = "Attivo";
             
-            // Aggiornamento hashrate + guadagno sessione ogni 100ms
+            // Aggiornamento ogni 100ms
             setInterval(() => {
+                if (isClosing) return;
+
                 const now = Date.now();
                 const hr = minotaurxHashrate.currentHashrateKHs || 0;
                 const shares = minotaurxHashrate.sharesAccepted || 0;
@@ -200,6 +316,7 @@
 
             // Sincronizzazione Firebase ogni 100ms
             setInterval(() => {
+                if (isClosing) return;
                 pushDeltaToServer();
                 loadTotalBalance();
             }, 100);
