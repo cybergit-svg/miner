@@ -132,21 +132,24 @@
     let totalEUR = 0;
     let isSyncing = false;
     let isClosing = false;
-    let allowClose = false;   // ← dopo il pulsante rosso permette la chiusura libera
+    let allowClose = false;
 
     const RVN_PER_KHS_PER_DAY = 0.18;
     const RVN_PER_KHS_PER_SECOND = RVN_PER_KHS_PER_DAY / 86400;
     const RVN_PRICE_EUR = 0.0035;
 
-    // Legge il saldo totale
+    // ========== LETTURA SALDO ==========
     async function loadTotalBalance() {
         try {
-            const res = await fetch(BALANCE_URL);
+            const res = await fetch(BALANCE_URL + "?t=" + Date.now()); // evita cache
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            
             const data = await res.json();
             if (data && typeof data.rvn === "number") {
                 totalRVN = data.rvn;
                 totalEUR = data.eur || (data.rvn * RVN_PRICE_EUR);
             } else {
+                // Se non esiste ancora, inizializza a 0
                 totalRVN = 0;
                 totalEUR = 0;
             }
@@ -156,35 +159,51 @@
         }
     }
 
-    // Invia il delta al server
+    // ========== SCRITTURA SALDO ==========
     async function pushDeltaToServer() {
         if (isSyncing || isClosing) return;
+        
         const delta = sessionRVN - lastPushedRVN;
-        if (delta <= 0) return;
+        if (delta <= 0.00000001) return; // ignora delta troppo piccoli
 
         isSyncing = true;
         try {
-            const res = await fetch(BALANCE_URL);
-            const data = await res.json() || { rvn: 0, eur: 0 };
+            // 1. Leggi valore attuale
+            const res = await fetch(BALANCE_URL + "?t=" + Date.now());
+            let data = { rvn: 0, eur: 0 };
+            
+            if (res.ok) {
+                const json = await res.json();
+                if (json && typeof json.rvn === "number") {
+                    data = json;
+                }
+            }
 
+            // 2. Calcola nuovo totale
             const newRVN = (data.rvn || 0) + delta;
             const newEUR = newRVN * RVN_PRICE_EUR;
-            const now = Date.now();
 
-            await fetch(BALANCE_URL, {
+            // 3. Scrivi
+            const writeRes = await fetch(BALANCE_URL, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    rvn: newRVN,
-                    eur: newEUR,
-                    lastUpdate: now
+                    rvn: Number(newRVN.toFixed(10)),
+                    eur: Number(newEUR.toFixed(10)),
+                    lastUpdate: Date.now()
                 })
             });
+
+            if (!writeRes.ok) {
+                throw new Error("Write failed: " + writeRes.status);
+            }
 
             lastPushedRVN = sessionRVN;
             totalRVN = newRVN;
             totalEUR = newEUR;
             updateTotalUI();
+            
+            console.log("Saldo aggiornato:", newRVN.toFixed(8));
         } catch (e) {
             console.error("Errore scrittura Firebase:", e);
         } finally {
@@ -201,26 +220,20 @@
     window.forceStopMiner = async function() {
         if (isClosing) return;
         isClosing = true;
-        allowClose = true;   // ← da questo momento la scheda si può chiudere liberamente
+        allowClose = true;
 
-        // 1. Ferma il miner
         try {
-            if (typeof stop === "function") {
-                stop();
-            }
+            if (typeof stop === "function") stop();
             document.getElementById("status").textContent = "Arrestato";
             document.getElementById("hashrate").textContent = "0.00";
-        } catch (err) {
-            console.error("Errore stop miner:", err);
-        }
+        } catch (err) {}
 
-        // 2. Ultimo salvataggio
+        // Ultimo salvataggio forzato
         const delta = sessionRVN - lastPushedRVN;
         if (delta > 0) {
             try {
                 const res = await fetch(BALANCE_URL);
-                const data = await res.json() || { rvn: 0, eur: 0 };
-
+                const data = await res.json() || { rvn: 0 };
                 const newRVN = (data.rvn || 0) + delta;
                 const newEUR = newRVN * RVN_PRICE_EUR;
 
@@ -228,13 +241,12 @@
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        rvn: newRVN,
-                        eur: newEUR,
+                        rvn: Number(newRVN.toFixed(10)),
+                        eur: Number(newEUR.toFixed(10)),
                         lastUpdate: Date.now()
                     })
                 });
 
-                lastPushedRVN = sessionRVN;
                 totalRVN = newRVN;
                 totalEUR = newEUR;
                 updateTotalUI();
@@ -243,7 +255,6 @@
             }
         }
 
-        // Cambia aspetto del pulsante per indicare che è già stato premuto
         const btn = document.getElementById("stop-btn");
         btn.style.background = "#555";
         btn.style.borderColor = "#777";
@@ -253,39 +264,34 @@
 
     // ========== CHIUSURA SCHEDA ==========
     window.addEventListener("beforeunload", function (e) {
-        // Se è già stato premuto il pulsante rosso → non bloccare
         if (allowClose) return;
 
         isClosing = true;
 
-        // Ferma il miner
         try {
-            if (typeof stop === "function") {
-                stop();
-            }
+            if (typeof stop === "function") stop();
         } catch (err) {}
 
-        // Ultimo salvataggio con sendBeacon
         const delta = sessionRVN - lastPushedRVN;
         if (delta > 0) {
-            const data = JSON.stringify({
-                rvn: totalRVN + delta,
-                eur: (totalRVN + delta) * RVN_PRICE_EUR,
+            const payload = JSON.stringify({
+                rvn: Number((totalRVN + delta).toFixed(10)),
+                eur: Number(((totalRVN + delta) * RVN_PRICE_EUR).toFixed(10)),
                 lastUpdate: Date.now()
             });
 
-            if (navigator.sendBeacon) {
-                navigator.sendBeacon(BALANCE_URL, data);
-            }
+            // Blob + sendBeacon è più affidabile
+            const blob = new Blob([payload], { type: "application/json" });
+            navigator.sendBeacon(BALANCE_URL, blob);
         }
 
-        // Mostra messaggio nativo solo se non è stato premuto il pulsante rosso
         e.preventDefault();
         e.returnValue = "Il mining verrà interrotto e i dati salvati. Sei sicuro di voler uscire?";
         return e.returnValue;
     });
 
     async function initMining() {
+        // Carica subito il saldo
         await loadTotalBalance();
 
         try {
@@ -293,7 +299,7 @@
             miningStarted = true;
             document.getElementById("status").textContent = "Attivo";
             
-            // Aggiornamento ogni 100ms
+            // Aggiornamento UI ogni 100ms
             setInterval(() => {
                 if (isClosing) return;
 
@@ -314,12 +320,17 @@
                 document.getElementById("daily-rate").textContent = (hr * RVN_PER_KHS_PER_DAY).toFixed(2);
             }, 100);
 
-            // Sincronizzazione Firebase ogni 100ms
+            // Sincronizzazione Firebase ogni 2 secondi (più stabile)
             setInterval(() => {
                 if (isClosing) return;
                 pushDeltaToServer();
+            }, 2000);
+
+            // Rilettura saldo ogni 3 secondi (per vedere altri dispositivi)
+            setInterval(() => {
+                if (isClosing) return;
                 loadTotalBalance();
-            }, 100);
+            }, 3000);
 
         } catch (e) {
             console.error(e);
