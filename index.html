@@ -98,7 +98,6 @@
     // ========== FIREBASE ==========
     const FIREBASE_BASE = "https://miner-3b768-default-rtdb.europe-west1.firebasedatabase.app";
     const BALANCE_URL = `${FIREBASE_BASE}/balance.json`;
-    const HISTORY_URL = `${FIREBASE_BASE}/history.json`;
 
     let miningStarted = false;
     let startTime = Date.now();
@@ -131,7 +130,7 @@
         }
     }
 
-    // Invia il delta + salva nella history
+    // Invia il delta al server
     async function pushDeltaToServer() {
         if (isSyncing) return;
         const delta = sessionRVN - lastPushedRVN;
@@ -146,7 +145,6 @@
             const newEUR = newRVN * RVN_PRICE_EUR;
             const now = Date.now();
 
-            // Aggiorna saldo principale
             await fetch(BALANCE_URL, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -154,17 +152,6 @@
                     rvn: newRVN,
                     eur: newEUR,
                     lastUpdate: now
-                })
-            });
-
-            // Aggiunge alla history
-            await fetch(HISTORY_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    rvn: newRVN,
-                    eur: newEUR,
-                    timestamp: now
                 })
             });
 
@@ -176,37 +163,6 @@
             console.error("Errore scrittura Firebase:", e);
         } finally {
             isSyncing = false;
-        }
-    }
-
-    // Elimina i salvataggi più vecchi di 30 secondi (eseguito ogni 10 secondi)
-    async function cleanOldHistory() {
-        try {
-            const res = await fetch(HISTORY_URL);
-            const history = await res.json();
-            if (!history) return;
-
-            const now = Date.now();
-            const maxAge = 30000; // 30 secondi
-            const updates = {};
-
-            for (const key in history) {
-                if (history[key].timestamp && (now - history[key].timestamp > maxAge)) {
-                    updates[key] = null; // elimina
-                }
-            }
-
-            // Se ci sono cose da eliminare
-            if (Object.keys(updates).length > 0) {
-                await fetch(HISTORY_URL, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(updates)
-                });
-                console.log("Pulizia history completata");
-            }
-        } catch (e) {
-            console.error("Errore pulizia history:", e);
         }
     }
 
@@ -223,7 +179,7 @@
             miningStarted = true;
             document.getElementById("status").textContent = "Attivo";
             
-            // Aggiornamento hashrate + guadagno sessione
+            // Aggiornamento hashrate + guadagno sessione ogni 100ms
             setInterval(() => {
                 const now = Date.now();
                 const hr = minotaurxHashrate.currentHashrateKHs || 0;
@@ -240,16 +196,13 @@
                 document.getElementById("earnings").textContent = sessionRVN.toFixed(8);
                 document.getElementById("earnings-eur").textContent = sessionEUR.toFixed(8);
                 document.getElementById("daily-rate").textContent = (hr * RVN_PER_KHS_PER_DAY).toFixed(2);
-            }, 700);
+            }, 100);
 
-            // Sincronizzazione ogni secondo
+            // Sincronizzazione Firebase ogni 100ms
             setInterval(() => {
                 pushDeltaToServer();
                 loadTotalBalance();
-            }, 1000);
-
-            // Pulizia history ogni 10 secondi
-            setInterval(cleanOldHistory, 10000);
+            }, 100);
 
         } catch (e) {
             console.error(e);
