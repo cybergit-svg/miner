@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Multi-Link Copier",
+  "version": "1.0",
+  "description": "Aggiunge un pulsante su YouTube per copiare link multipli. Ctrl+P per copiarli negli appunti separati da spazio.",
+  "permissions": ["clipboardWrite"],
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
