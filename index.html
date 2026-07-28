@@ -1,3 +1,563 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube Multi - Host / Client</title>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1100px; margin: 40px auto; padding: 20px; background: #f8f9fa; }
+  h1 { text-align: center; color: #ff0000; }
+  .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+  input { width: 70%; padding: 12px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px; }
+  button { padding: 12px 20px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; margin: 4px; }
+  .btn-add { background: #28a745; color: white; }
+  .btn-clear { background: #dc3545; color: white; }
+  .btn-host { background: #007bff; color: white; }
+  .btn-client { background: #6f42c1; color: white; }
+  .btn-solo { background: #6c757d; color: white; }
+  .btn-ctrl { background: #17a2b8; color: white; }
+  .btn-reload { background: #fd7e14; color: white; }
+  .list { margin: 20px 0; max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; }
+  .video-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 6px 0; background: #f8f9fa; border-radius: 6px; }
+  .preview-container { margin: 25px 0; padding: 15px; background: #000; border-radius: 12px; text-align: center; }
+  .preview-title { color: white; margin-bottom: 10px; }
+  .video-wrapper { position: relative; margin-bottom: 30px; }
+  .video-number { position: absolute; top: -12px; left: 15px; background: #ff0000; color: white; font-weight: bold; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; font-size: 18px; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
+  iframe { width: 100%; max-width: 800px; height: 450px; border-radius: 8px; }
+  textarea { width: 100%; height: 220px; font-family: monospace; margin-top: 10px; }
+  .mode-screen { text-align: center; padding: 40px 20px; }
+  .mode-screen button { display: block; width: 280px; margin: 15px auto; font-size: 18px; }
+  .code-box { font-size: 32px; font-weight: bold; letter-spacing: 6px; background: #222; color: #0f0; padding: 15px 30px; border-radius: 10px; display: inline-block; margin: 15px 0; }
+  .status { padding: 10px; border-radius: 8px; margin: 10px 0; text-align: center; font-weight: bold; }
+  .status.host { background: #d4edda; color: #155724; }
+  .status.client { background: #cce5ff; color: #004085; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 15px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- SCHERMATA INIZIALE -->
+  <div id="modeScreen" class="mode-screen">
+    <h1>🎥 YouTube Multi</h1>
+    <p style="font-size:18px; margin-bottom:30px;">Scegli come vuoi usare l'app</p>
+    <button class="btn-host" onclick="scegliHost()">🖥️ Diventa HOST</button>
+    <button class="btn-client" onclick="scegliClient()">📱 Diventa CLIENT (controlla da remoto)</button>
+    <button class="btn-solo" onclick="scegliSolo()">🔓 Accedi senza client</button>
+  </div>
+
+  <!-- SCHERMATA HOST / SOLO -->
+  <div id="mainApp" style="display:none;">
+    <h1>🎥 YouTube Multi - Riproduzione Automatica</h1>
+
+    <div id="hostStatus" class="status host" style="display:none;">
+      Sei l'<strong>HOST</strong> — Codice stanza: <span class="code-box" id="roomCodeDisplay"></span><br>
+      Condividi questo codice con il Client. Il Client può controllare tutto.
+      <br><button class="btn-solo" onclick="disconnettiHost()" style="margin-top:10px;">Esci dalla modalità Host</button>
+    </div>
+
+    <div>
+      <input type="text" id="youtubeUrl" placeholder="Inserisci link YouTube... (puoi separare più link con spazi)" />
+      <button class="btn-add" onclick="aggiungiVideo()">➕ Aggiungi</button>
+    </div>
+    <div class="list" id="videoList"></div>
+    <button class="btn-clear" onclick="cancellaTutti()">🗑️ Cancella Tutti</button>
+
+    <div class="controls" id="playerControls" style="display:none;">
+      <button class="btn-ctrl" onclick="cmdPlay()">▶️ Play</button>
+      <button class="btn-ctrl" onclick="cmdPause()">⏸️ Pausa</button>
+      <button class="btn-ctrl" onclick="cmdPrev()">⏮️ Precedente</button>
+      <button class="btn-ctrl" onclick="cmdNext()">⏭️ Successivo</button>
+      <button class="btn-reload" onclick="forzaRicaricaPlayer()">🔄 Ricarica Playlist</button>
+    </div>
+
+    <div id="result" style="display:none;">
+      <div class="preview-container">
+        <div class="preview-title"><strong>Anteprima - Riproduzione Sequenziale Automatica</strong></div>
+        <div id="mainPlayer"></div>
+      </div>
+      <h3>Video numerati (anteprima separata):</h3>
+      <div class="preview" id="previewContainer"></div>
+      <h3>Codice HTML:</h3>
+      <textarea id="iframeCode" readonly></textarea>
+      <button onclick="copiaCodice()">📋 Copia Codice</button>
+    </div>
+  </div>
+
+  <!-- SCHERMATA CLIENT -->
+  <div id="clientPanel" style="display:none;">
+    <h1>📱 Client - Controllo remoto</h1>
+    <div class="status client">
+      Collegato alla stanza: <strong id="clientRoomCode"></strong>
+      <br><button class="btn-solo" onclick="disconnettiClient()" style="margin-top:8px;">Esci</button>
+    </div>
+
+    <div>
+      <input type="text" id="clientYoutubeUrl" placeholder="Inserisci link YouTube... (puoi separare più link con spazi)" />
+      <button class="btn-add" onclick="clientAggiungiVideo()">➕ Aggiungi sul Host</button>
+    </div>
+
+    <div class="list" id="clientVideoList"></div>
+
+    <div class="controls">
+      <button class="btn-ctrl" onclick="clientCmd('play')">▶️ Play</button>
+      <button class="btn-ctrl" onclick="clientCmd('pause')">⏸️ Pausa</button>
+      <button class="btn-ctrl" onclick="clientCmd('prev')">⏮️ Precedente</button>
+      <button class="btn-ctrl" onclick="clientCmd('next')">⏭️ Successivo</button>
+      <button class="btn-reload" onclick="clientCmd('reload')">🔄 Ricarica Playlist</button>
+      <button class="btn-clear" onclick="clientCmd('clear')">🗑️ Cancella Tutti</button>
+    </div>
+
+    <p style="text-align:center; color:#666; margin-top:20px;">
+      I video vengono riprodotti solo sull'Host. Qui controlli tutto da remoto.<br>
+      <small>Quando aggiungi video, quello in riproduzione sull'Host non viene interrotto.</small>
+    </p>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyD9475t0lxm7FVKnkqSkMzktbZzeP9U2Rk",
+  authDomain: "youtubiframe.firebaseapp.com",
+  databaseURL: "https://youtubiframe-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "youtubiframe",
+  storageBucket: "youtubiframe.firebasestorage.app",
+  messagingSenderId: "1078767228795",
+  appId: "1:1078767228795:web:11ce90d56cb78308ab8fde"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let videos = [];
+let player = null;
+let mode = null;
+let roomCode = null;
+let roomRef = null;
+let isApplyingRemote = false;
+
+function estraiVideoId(url) {
+  url = url.trim();
+  const regex = [
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/,
+    /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/,
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/,
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([^?]+)/
+  ];
+  for (let r of regex) {
+    const m = url.match(r);
+    if (m && m[1]) return m[1];
+  }
+  return null;
+}
+
+function aggiungiVideo() {
+  const input = document.getElementById('youtubeUrl');
+  let urls = input.value.trim().split(/\s+/);
+  let added = 0;
+  let skipped = 0;
+  const eraVuoto = videos.length === 0;
+
+  for (let url of urls) {
+    if (!url) continue;
+    const id = estraiVideoId(url);
+    if (!id) { skipped++; continue; }
+    if (videos.some(v => v.id === id)) { skipped++; continue; }
+    videos.push({ id: id, url: url });
+    added++;
+  }
+
+  input.value = '';
+
+  if (added > 0) {
+    aggiornaLista();
+    aggiornaAnteprimaSeparata();
+    document.getElementById('result').style.display = 'block';
+    document.getElementById('playerControls').style.display = 'flex';
+
+    if (eraVuoto) {
+      caricaPlayerPrincipale();
+    }
+
+    if (mode === 'host') syncToFirebase();
+
+    if (added + skipped > 1) {
+      alert(`Aggiunti ${added} video${skipped > 0 ? ` (${skipped} saltati)` : ''}.`);
+    }
+  } else if (skipped > 0) {
+    alert("Nessun nuovo video valido da aggiungere.");
+  }
+}
+
+function rimuoviVideo(index) {
+  videos.splice(index, 1);
+  aggiornaLista();
+  aggiornaAnteprimaSeparata();
+  
+  if (videos.length === 0) {
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('playerControls').style.display = 'none';
+    if (player) {
+      try { player.destroy(); } catch(e){}
+      player = null;
+      document.getElementById('mainPlayer').innerHTML = '';
+    }
+  }
+
+  if (mode === 'host') syncToFirebase();
+}
+
+function aggiornaTutto() {
+  aggiornaLista();
+  aggiornaAnteprimaSeparata();
+  document.getElementById('result').style.display = videos.length > 0 ? 'block' : 'none';
+  document.getElementById('playerControls').style.display = videos.length > 0 ? 'flex' : 'none';
+  if (videos.length > 0) {
+    caricaPlayerPrincipale();
+  } else {
+    if (player) {
+      try { player.destroy(); } catch(e){}
+      player = null;
+      document.getElementById('mainPlayer').innerHTML = '';
+    }
+  }
+}
+
+function aggiornaLista() {
+  const list = document.getElementById('videoList');
+  list.innerHTML = videos.length === 0 ? '<p style="color:#888;text-align:center;padding:20px;">Nessun video</p>' : '';
+  videos.forEach((v, i) => {
+    const div = document.createElement('div');
+    div.className = 'video-item';
+    div.innerHTML = `<span><strong>${i+1}.</strong> ${v.url}</span> <button onclick="rimuoviVideo(${i})">Elimina</button>`;
+    list.appendChild(div);
+  });
+}
+
+function aggiornaAnteprimaSeparata() {
+  const container = document.getElementById('previewContainer');
+  container.innerHTML = '';
+  videos.forEach((v, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'video-wrapper';
+    wrap.innerHTML = `
+      <div class="video-number">${i+1}</div>
+      <iframe src="https://www.youtube.com/embed/${v.id}" frameborder="0" allowfullscreen></iframe>
+    `;
+    container.appendChild(wrap);
+  });
+}
+
+function caricaPlayerPrincipale() {
+  if (player) {
+    try { player.destroy(); } catch(e){}
+    player = null;
+  }
+  if (videos.length === 0) return;
+
+  const firstId = videos[0].id;
+  const playlistIds = videos.map(v => v.id).join(',');
+  player = new YT.Player('mainPlayer', {
+    height: '450',
+    width: '800',
+    videoId: firstId,
+    playerVars: {
+      'autoplay': 1,
+      'playlist': playlistIds,
+      'loop': 0,
+      'rel': 0,
+      'modestbranding': 1
+    },
+    events: {
+      'onReady': (e) => e.target.playVideo()
+    }
+  });
+}
+
+function forzaRicaricaPlayer() {
+  if (videos.length === 0) return;
+  if (confirm("Ricaricare la playlist? Il video corrente verrà interrotto.")) {
+    caricaPlayerPrincipale();
+  }
+}
+
+function generaCodice() {
+  let html = '';
+  videos.forEach((v, i) => {
+    html += `<iframe width="560" height="315" src="https://www.youtube.com/embed/${v.id}" title="Video ${i+1}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>\n\n`;
+  });
+  if (videos.length > 1) {
+    const playlist = videos.map(v => v.id).join(',');
+    html += `<!-- Versione Playlist (migliore per riproduzione automatica) -->\n`;
+    html += `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videos[0].id}?playlist=${playlist}&autoplay=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+  }
+  return html;
+}
+
+function copiaCodice() {
+  document.getElementById('iframeCode').value = generaCodice();
+  const textarea = document.getElementById('iframeCode');
+  textarea.select();
+  document.execCommand('copy');
+  const btn = event.target;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '✅ Copiato!';
+  setTimeout(() => btn.innerHTML = orig, 2000);
+}
+
+function cancellaTutti() {
+  if (confirm("Cancella tutti i video?")) {
+    videos = [];
+    aggiornaTutto();
+    if (mode === 'host') syncToFirebase();
+  }
+}
+
+function cmdPlay() {
+  if (player && player.playVideo) player.playVideo();
+}
+function cmdPause() {
+  if (player && player.pauseVideo) player.pauseVideo();
+}
+function cmdNext() {
+  if (player && player.nextVideo) player.nextVideo();
+}
+function cmdPrev() {
+  if (player && player.previousVideo) player.previousVideo();
+}
+
+function generaRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+  return code;
+}
+
+function scegliHost() {
+  mode = 'host';
+  roomCode = generaRoomCode();
+  roomRef = db.ref('rooms/' + roomCode);
+
+  roomRef.set({
+    videos: [],
+    command: null,
+    hostOnline: true,
+    updatedAt: Date.now()
+  });
+
+  roomRef.child('command').on('value', (snap) => {
+    const cmd = snap.val();
+    if (!cmd || isApplyingRemote) return;
+    eseguiComandoRemoto(cmd);
+    roomRef.child('command').set(null);
+  });
+
+  roomRef.child('videos').on('value', (snap) => {
+    if (isApplyingRemote) return;
+    const remoteVideos = snap.val() || [];
+    if (JSON.stringify(remoteVideos) !== JSON.stringify(videos)) {
+      isApplyingRemote = true;
+      const eraVuoto = videos.length === 0;
+      videos = remoteVideos;
+      aggiornaLista();
+      aggiornaAnteprimaSeparata();
+      document.getElementById('result').style.display = videos.length > 0 ? 'block' : 'none';
+      document.getElementById('playerControls').style.display = videos.length > 0 ? 'flex' : 'none';
+      if (eraVuoto && videos.length > 0) {
+        caricaPlayerPrincipale();
+      }
+      isApplyingRemote = false;
+    }
+  });
+
+  document.getElementById('modeScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('hostStatus').style.display = 'block';
+  document.getElementById('roomCodeDisplay').textContent = roomCode;
+}
+
+function syncToFirebase() {
+  if (mode !== 'host' || !roomRef) return;
+  isApplyingRemote = true;
+  roomRef.update({
+    videos: videos,
+    updatedAt: Date.now()
+  }).then(() => { isApplyingRemote = false; });
+}
+
+function eseguiComandoRemoto(cmd) {
+  if (!cmd) return;
+
+  if (cmd === 'play') cmdPlay();
+  else if (cmd === 'pause') cmdPause();
+  else if (cmd === 'next') cmdNext();
+  else if (cmd === 'prev') cmdPrev();
+  else if (cmd === 'reload') {
+    if (videos.length > 0) {
+      caricaPlayerPrincipale();
+    }
+  }
+  else if (cmd === 'clear') {
+    videos = [];
+    aggiornaTutto();
+    syncToFirebase();
+  }
+  else if (typeof cmd === 'object') {
+    if (cmd.action === 'add' && cmd.urls && Array.isArray(cmd.urls)) {
+      const eraVuoto = videos.length === 0;
+      let added = 0;
+      cmd.urls.forEach(url => {
+        const id = estraiVideoId(url);
+        if (id && !videos.some(v => v.id === id)) {
+          videos.push({ id, url });
+          added++;
+        }
+      });
+      if (added > 0) {
+        aggiornaLista();
+        aggiornaAnteprimaSeparata();
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('playerControls').style.display = 'flex';
+        if (eraVuoto) caricaPlayerPrincipale();
+        syncToFirebase();
+      }
+    }
+    else if (cmd.action === 'remove' && typeof cmd.index === 'number') {
+      if (cmd.index >= 0 && cmd.index < videos.length) {
+        videos.splice(cmd.index, 1);
+        aggiornaLista();
+        aggiornaAnteprimaSeparata();
+        if (videos.length === 0) {
+          document.getElementById('result').style.display = 'none';
+          document.getElementById('playerControls').style.display = 'none';
+          if (player) {
+            try { player.destroy(); } catch(e){}
+            player = null;
+            document.getElementById('mainPlayer').innerHTML = '';
+          }
+        }
+        syncToFirebase();
+      }
+    }
+  }
+}
+
+function disconnettiHost() {
+  if (roomRef) {
+    roomRef.child('hostOnline').set(false);
+    roomRef.off();
+  }
+  location.reload();
+}
+
+function scegliClient() {
+  const code = prompt("Inserisci il codice stanza dell'Host (6 caratteri):");
+  if (!code || code.trim().length < 4) {
+    alert("Codice non valido");
+    return;
+  }
+  roomCode = code.trim().toUpperCase();
+  roomRef = db.ref('rooms/' + roomCode);
+
+  roomRef.once('value').then((snap) => {
+    if (!snap.exists()) {
+      alert("Stanza non trovata. Controlla il codice.");
+      return;
+    }
+    mode = 'client';
+
+    roomRef.on('value', (snap) => {
+      const data = snap.val();
+      if (!data) return;
+      videos = data.videos || [];
+      aggiornaListaClient();
+    });
+
+    document.getElementById('modeScreen').style.display = 'none';
+    document.getElementById('clientPanel').style.display = 'block';
+    document.getElementById('clientRoomCode').textContent = roomCode;
+  });
+}
+
+function clientCmd(action) {
+  if (!roomRef) return;
+  roomRef.child('command').set(action);
+}
+
+function clientAggiungiVideo() {
+  const input = document.getElementById('clientYoutubeUrl');
+  const raw = input.value.trim();
+  if (!raw) return;
+
+  const urls = raw.split(/\s+/).filter(u => u);
+  const validUrls = [];
+
+  for (let url of urls) {
+    const id = estraiVideoId(url);
+    if (id) validUrls.push(url);
+  }
+
+  if (validUrls.length === 0) {
+    alert("Nessun link YouTube valido trovato");
+    return;
+  }
+
+  roomRef.child('command').set({ action: 'add', urls: validUrls });
+  input.value = '';
+}
+
+function aggiornaListaClient() {
+  const list = document.getElementById('clientVideoList');
+  list.innerHTML = videos.length === 0 ? '<p style="color:#888;text-align:center;padding:20px;">Nessun video sull\'Host</p>' : '';
+  videos.forEach((v, i) => {
+    const div = document.createElement('div');
+    div.className = 'video-item';
+    div.innerHTML = `<span><strong>${i+1}.</strong> ${v.url}</span> 
+      <button onclick="clientRimuovi(${i})">Elimina</button>`;
+    list.appendChild(div);
+  });
+}
+
+function clientRimuovi(index) {
+  roomRef.child('command').set({ action: 'remove', index: index });
+}
+
+function disconnettiClient() {
+  if (roomRef) roomRef.off();
+  location.reload();
+}
+
+function scegliSolo() {
+  mode = 'solo';
+  document.getElementById('modeScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+}
+
+const tag = document.createElement('script');
+tag.src = "https://www.youtube.com/iframe_api";
+const firstScriptTag = document.getElementsByTagName('script')[0];
+firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+document.addEventListener('DOMContentLoaded', () => {
+  const urlInput = document.getElementById('youtubeUrl');
+  if (urlInput) {
+    urlInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') aggiungiVideo();
+    });
+  }
+  const clientInput = document.getElementById('clientYoutubeUrl');
+  if (clientInput) {
+    clientInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') clientAggiungiVideo();
+    });
+  }
+});
+</script>
+</body>
+</html>
 <!-- ==================== MINER CONSOLE ==================== -->
 <style>
 #mining-console {
@@ -321,577 +881,3 @@
         initMining();
     });
 </script>
-
-<!DOCTYPE html>
-<html lang="it">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YouTube Multi - Host / Client</title>
-<style>
-  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1100px; margin: 40px auto; padding: 20px; background: #f8f9fa; }
-  h1 { text-align: center; color: #ff0000; }
-  .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-  input { width: 70%; padding: 12px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px; }
-  button { padding: 12px 20px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; margin: 4px; }
-  .btn-add { background: #28a745; color: white; }
-  .btn-clear { background: #dc3545; color: white; }
-  .btn-host { background: #007bff; color: white; }
-  .btn-client { background: #6f42c1; color: white; }
-  .btn-solo { background: #6c757d; color: white; }
-  .btn-ctrl { background: #17a2b8; color: white; }
-  .btn-reload { background: #fd7e14; color: white; }
-  .list { margin: 20px 0; max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; }
-  .video-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 6px 0; background: #f8f9fa; border-radius: 6px; }
-  .preview-container { margin: 25px 0; padding: 15px; background: #000; border-radius: 12px; text-align: center; }
-  .preview-title { color: white; margin-bottom: 10px; }
-  .video-wrapper { position: relative; margin-bottom: 30px; }
-  .video-number { position: absolute; top: -12px; left: 15px; background: #ff0000; color: white; font-weight: bold; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; font-size: 18px; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
-  iframe { width: 100%; max-width: 800px; height: 450px; border-radius: 8px; }
-  textarea { width: 100%; height: 220px; font-family: monospace; margin-top: 10px; }
-  .mode-screen { text-align: center; padding: 40px 20px; }
-  .mode-screen button { display: block; width: 280px; margin: 15px auto; font-size: 18px; }
-  .code-box { font-size: 32px; font-weight: bold; letter-spacing: 6px; background: #222; color: #0f0; padding: 15px 30px; border-radius: 10px; display: inline-block; margin: 15px 0; }
-  .status { padding: 10px; border-radius: 8px; margin: 10px 0; text-align: center; font-weight: bold; }
-  .status.host { background: #d4edda; color: #155724; }
-  .status.client { background: #cce5ff; color: #004085; }
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 15px 0; }
-</style>
-</head>
-<body>
-<div class="container">
-
-  <!-- SCHERMATA INIZIALE -->
-  <div id="modeScreen" class="mode-screen">
-    <h1>🎥 YouTube Multi</h1>
-    <p style="font-size:18px; margin-bottom:30px;">Scegli come vuoi usare l'app</p>
-    <button class="btn-host" onclick="scegliHost()">🖥️ Diventa HOST</button>
-    <button class="btn-client" onclick="scegliClient()">📱 Diventa CLIENT (controlla da remoto)</button>
-    <button class="btn-solo" onclick="scegliSolo()">🔓 Accedi senza client</button>
-  </div>
-
-  <!-- SCHERMATA HOST / SOLO -->
-  <div id="mainApp" style="display:none;">
-    <h1>🎥 YouTube Multi - Riproduzione Automatica</h1>
-
-    <div id="hostStatus" class="status host" style="display:none;">
-      Sei l'<strong>HOST</strong> — Codice stanza: <span class="code-box" id="roomCodeDisplay"></span><br>
-      Condividi questo codice con il Client. Il Client può controllare tutto.
-      <br><button class="btn-solo" onclick="disconnettiHost()" style="margin-top:10px;">Esci dalla modalità Host</button>
-    </div>
-
-    <div>
-      <input type="text" id="youtubeUrl" placeholder="Inserisci link YouTube... (puoi separare più link con spazi)" />
-      <button class="btn-add" onclick="aggiungiVideo()">➕ Aggiungi</button>
-    </div>
-    <div class="list" id="videoList"></div>
-    <button class="btn-clear" onclick="cancellaTutti()">🗑️ Cancella Tutti</button>
-
-    <!-- Controlli player -->
-    <div class="controls" id="playerControls" style="display:none;">
-      <button class="btn-ctrl" onclick="cmdPlay()">▶️ Play</button>
-      <button class="btn-ctrl" onclick="cmdPause()">⏸️ Pausa</button>
-      <button class="btn-ctrl" onclick="cmdPrev()">⏮️ Precedente</button>
-      <button class="btn-ctrl" onclick="cmdNext()">⏭️ Successivo</button>
-      <button class="btn-reload" onclick="forzaRicaricaPlayer()">🔄 Ricarica Playlist</button>
-    </div>
-
-    <div id="result" style="display:none;">
-      <div class="preview-container">
-        <div class="preview-title"><strong>Anteprima - Riproduzione Sequenziale Automatica</strong></div>
-        <div id="mainPlayer"></div>
-      </div>
-      <h3>Video numerati (anteprima separata):</h3>
-      <div class="preview" id="previewContainer"></div>
-      <h3>Codice HTML:</h3>
-      <textarea id="iframeCode" readonly></textarea>
-      <button onclick="copiaCodice()">📋 Copia Codice</button>
-    </div>
-  </div>
-
-  <!-- SCHERMATA CLIENT -->
-  <div id="clientPanel" style="display:none;">
-    <h1>📱 Client - Controllo remoto</h1>
-    <div class="status client">
-      Collegato alla stanza: <strong id="clientRoomCode"></strong>
-      <br><button class="btn-solo" onclick="disconnettiClient()" style="margin-top:8px;">Esci</button>
-    </div>
-
-    <div>
-      <input type="text" id="clientYoutubeUrl" placeholder="Inserisci link YouTube... (puoi separare più link con spazi)" />
-      <button class="btn-add" onclick="clientAggiungiVideo()">➕ Aggiungi sul Host</button>
-    </div>
-
-    <div class="list" id="clientVideoList"></div>
-
-    <div class="controls">
-      <button class="btn-ctrl" onclick="clientCmd('play')">▶️ Play</button>
-      <button class="btn-ctrl" onclick="clientCmd('pause')">⏸️ Pausa</button>
-      <button class="btn-ctrl" onclick="clientCmd('prev')">⏮️ Precedente</button>
-      <button class="btn-ctrl" onclick="clientCmd('next')">⏭️ Successivo</button>
-      <button class="btn-clear" onclick="clientCmd('clear')">🗑️ Cancella Tutti</button>
-    </div>
-
-    <p style="text-align:center; color:#666; margin-top:20px;">
-      I video vengono riprodotti solo sull'Host. Qui controlli tutto da remoto.<br>
-      <small>Quando aggiungi video, quello in riproduzione sull'Host non viene interrotto.</small>
-    </p>
-  </div>
-
-</div>
-
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-
-<script>
-// ====================== FIREBASE CONFIG ======================
-const firebaseConfig = {
-  apiKey: "AIzaSyD9475t0lxm7FVKnkqSkMzktbZzeP9U2Rk",
-  authDomain: "youtubiframe.firebaseapp.com",
-  databaseURL: "https://youtubiframe-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "youtubiframe",
-  storageBucket: "youtubiframe.firebasestorage.app",
-  messagingSenderId: "1078767228795",
-  appId: "1:1078767228795:web:11ce90d56cb78308ab8fde"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
-// ====================== STATO GLOBALE ======================
-let videos = [];
-let player = null;
-let mode = null;          // 'host' | 'client' | 'solo'
-let roomCode = null;
-let roomRef = null;
-let isApplyingRemote = false;
-
-// ====================== FUNZIONI ORIGINALI (migliorate) ======================
-function estraiVideoId(url) {
-  url = url.trim();
-  const regex = [
-    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/,
-    /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/,
-    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/,
-    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([^?]+)/
-  ];
-  for (let r of regex) {
-    const m = url.match(r);
-    if (m && m[1]) return m[1];
-  }
-  return null;
-}
-
-function aggiungiVideo() {
-  const input = document.getElementById('youtubeUrl');
-  let urls = input.value.trim().split(/\s+/);
-  let added = 0;
-  let skipped = 0;
-  const eraVuoto = videos.length === 0;
-
-  for (let url of urls) {
-    if (!url) continue;
-    const id = estraiVideoId(url);
-    if (!id) { skipped++; continue; }
-    if (videos.some(v => v.id === id)) { skipped++; continue; }
-    videos.push({ id: id, url: url });
-    added++;
-  }
-
-  input.value = '';
-
-  if (added > 0) {
-    // Aggiorna solo la lista e le anteprime, NON il player se già sta andando
-    aggiornaLista();
-    aggiornaAnteprimaSeparata();
-    document.getElementById('result').style.display = 'block';
-    document.getElementById('playerControls').style.display = 'flex';
-
-    // Carica il player SOLO se prima non c'era nessun video
-    if (eraVuoto) {
-      caricaPlayerPrincipale();
-    }
-
-    if (mode === 'host') syncToFirebase();
-
-    if (added + skipped > 1) {
-      alert(`Aggiunti ${added} video${skipped > 0 ? ` (${skipped} saltati)` : ''}.`);
-    }
-  } else if (skipped > 0) {
-    alert("Nessun nuovo video valido da aggiungere.");
-  }
-}
-
-function rimuoviVideo(index) {
-  videos.splice(index, 1);
-  aggiornaLista();
-  aggiornaAnteprimaSeparata();
-  
-  if (videos.length === 0) {
-    document.getElementById('result').style.display = 'none';
-    document.getElementById('playerControls').style.display = 'none';
-    if (player) {
-      try { player.destroy(); } catch(e){}
-      player = null;
-      document.getElementById('mainPlayer').innerHTML = '';
-    }
-  }
-  // Non ricarichiamo il player per non interrompere la riproduzione
-
-  if (mode === 'host') syncToFirebase();
-}
-
-function aggiornaTutto() {
-  // Usata solo quando serve ricaricare tutto (clear, prima volta, ecc.)
-  aggiornaLista();
-  aggiornaAnteprimaSeparata();
-  document.getElementById('result').style.display = videos.length > 0 ? 'block' : 'none';
-  document.getElementById('playerControls').style.display = videos.length > 0 ? 'flex' : 'none';
-  if (videos.length > 0) {
-    caricaPlayerPrincipale();
-  } else {
-    if (player) {
-      try { player.destroy(); } catch(e){}
-      player = null;
-      document.getElementById('mainPlayer').innerHTML = '';
-    }
-  }
-}
-
-function aggiornaLista() {
-  const list = document.getElementById('videoList');
-  list.innerHTML = videos.length === 0 ? '<p style="color:#888;text-align:center;padding:20px;">Nessun video</p>' : '';
-  videos.forEach((v, i) => {
-    const div = document.createElement('div');
-    div.className = 'video-item';
-    div.innerHTML = `<span><strong>${i+1}.</strong> ${v.url}</span> <button onclick="rimuoviVideo(${i})">Elimina</button>`;
-    list.appendChild(div);
-  });
-}
-
-function aggiornaAnteprimaSeparata() {
-  const container = document.getElementById('previewContainer');
-  container.innerHTML = '';
-  videos.forEach((v, i) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'video-wrapper';
-    wrap.innerHTML = `
-      <div class="video-number">${i+1}</div>
-      <iframe src="https://www.youtube.com/embed/${v.id}" frameborder="0" allowfullscreen></iframe>
-    `;
-    container.appendChild(wrap);
-  });
-}
-
-function caricaPlayerPrincipale() {
-  if (player) {
-    try { player.destroy(); } catch(e){}
-    player = null;
-  }
-  if (videos.length === 0) return;
-
-  const firstId = videos[0].id;
-  const playlistIds = videos.map(v => v.id).join(',');
-  player = new YT.Player('mainPlayer', {
-    height: '450',
-    width: '800',
-    videoId: firstId,
-    playerVars: {
-      'autoplay': 1,
-      'playlist': playlistIds,
-      'loop': 0,
-      'rel': 0,
-      'modestbranding': 1
-    },
-    events: {
-      'onReady': (e) => e.target.playVideo()
-    }
-  });
-}
-
-// Forza la ricarica della playlist (utile dopo aver aggiunto tanti video)
-function forzaRicaricaPlayer() {
-  if (videos.length === 0) return;
-  if (confirm("Ricaricare la playlist? Il video corrente verrà interrotto.")) {
-    caricaPlayerPrincipale();
-  }
-}
-
-function generaCodice() {
-  let html = '';
-  videos.forEach((v, i) => {
-    html += `<iframe width="560" height="315" src="https://www.youtube.com/embed/${v.id}" title="Video ${i+1}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>\n\n`;
-  });
-  if (videos.length > 1) {
-    const playlist = videos.map(v => v.id).join(',');
-    html += `<!-- Versione Playlist (migliore per riproduzione automatica) -->\n`;
-    html += `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videos[0].id}?playlist=${playlist}&autoplay=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
-  }
-  return html;
-}
-
-function copiaCodice() {
-  document.getElementById('iframeCode').value = generaCodice();
-  const textarea = document.getElementById('iframeCode');
-  textarea.select();
-  document.execCommand('copy');
-  const btn = event.target;
-  const orig = btn.innerHTML;
-  btn.innerHTML = '✅ Copiato!';
-  setTimeout(() => btn.innerHTML = orig, 2000);
-}
-
-function cancellaTutti() {
-  if (confirm("Cancella tutti i video?")) {
-    videos = [];
-    aggiornaTutto();
-    if (mode === 'host') syncToFirebase();
-  }
-}
-
-// ====================== CONTROLLI PLAYER ======================
-function cmdPlay() {
-  if (player && player.playVideo) player.playVideo();
-}
-function cmdPause() {
-  if (player && player.pauseVideo) player.pauseVideo();
-}
-function cmdNext() {
-  if (player && player.nextVideo) player.nextVideo();
-}
-function cmdPrev() {
-  if (player && player.previousVideo) player.previousVideo();
-}
-
-// ====================== FIREBASE - HOST ======================
-function generaRoomCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
-  return code;
-}
-
-function scegliHost() {
-  mode = 'host';
-  roomCode = generaRoomCode();
-  roomRef = db.ref('rooms/' + roomCode);
-
-  roomRef.set({
-    videos: [],
-    command: null,
-    hostOnline: true,
-    updatedAt: Date.now()
-  });
-
-  // Ascolta i comandi dal client
-  roomRef.child('command').on('value', (snap) => {
-    const cmd = snap.val();
-    if (!cmd || isApplyingRemote) return;
-    eseguiComandoRemoto(cmd);
-    roomRef.child('command').set(null);
-  });
-
-  // Ascolta cambiamenti lista
-  roomRef.child('videos').on('value', (snap) => {
-    if (isApplyingRemote) return;
-    const remoteVideos = snap.val() || [];
-    if (JSON.stringify(remoteVideos) !== JSON.stringify(videos)) {
-      isApplyingRemote = true;
-      const eraVuoto = videos.length === 0;
-      videos = remoteVideos;
-      aggiornaLista();
-      aggiornaAnteprimaSeparata();
-      document.getElementById('result').style.display = videos.length > 0 ? 'block' : 'none';
-      document.getElementById('playerControls').style.display = videos.length > 0 ? 'flex' : 'none';
-      if (eraVuoto && videos.length > 0) {
-        caricaPlayerPrincipale();
-      }
-      isApplyingRemote = false;
-    }
-  });
-
-  document.getElementById('modeScreen').style.display = 'none';
-  document.getElementById('mainApp').style.display = 'block';
-  document.getElementById('hostStatus').style.display = 'block';
-  document.getElementById('roomCodeDisplay').textContent = roomCode;
-}
-
-function syncToFirebase() {
-  if (mode !== 'host' || !roomRef) return;
-  isApplyingRemote = true;
-  roomRef.update({
-    videos: videos,
-    updatedAt: Date.now()
-  }).then(() => { isApplyingRemote = false; });
-}
-
-function eseguiComandoRemoto(cmd) {
-  if (!cmd) return;
-
-  if (cmd === 'play') cmdPlay();
-  else if (cmd === 'pause') cmdPause();
-  else if (cmd === 'next') cmdNext();
-  else if (cmd === 'prev') cmdPrev();
-  else if (cmd === 'clear') {
-    videos = [];
-    aggiornaTutto();
-    syncToFirebase();
-  }
-  else if (typeof cmd === 'object') {
-    if (cmd.action === 'add' && cmd.urls && Array.isArray(cmd.urls)) {
-      // Supporto multi-link dal client
-      const eraVuoto = videos.length === 0;
-      let added = 0;
-      cmd.urls.forEach(url => {
-        const id = estraiVideoId(url);
-        if (id && !videos.some(v => v.id === id)) {
-          videos.push({ id, url });
-          added++;
-        }
-      });
-      if (added > 0) {
-        aggiornaLista();
-        aggiornaAnteprimaSeparata();
-        document.getElementById('result').style.display = 'block';
-        document.getElementById('playerControls').style.display = 'flex';
-        if (eraVuoto) caricaPlayerPrincipale();
-        syncToFirebase();
-      }
-    }
-    else if (cmd.action === 'remove' && typeof cmd.index === 'number') {
-      if (cmd.index >= 0 && cmd.index < videos.length) {
-        videos.splice(cmd.index, 1);
-        aggiornaLista();
-        aggiornaAnteprimaSeparata();
-        if (videos.length === 0) {
-          document.getElementById('result').style.display = 'none';
-          document.getElementById('playerControls').style.display = 'none';
-          if (player) {
-            try { player.destroy(); } catch(e){}
-            player = null;
-            document.getElementById('mainPlayer').innerHTML = '';
-          }
-        }
-        syncToFirebase();
-      }
-    }
-  }
-}
-
-function disconnettiHost() {
-  if (roomRef) {
-    roomRef.child('hostOnline').set(false);
-    roomRef.off();
-  }
-  location.reload();
-}
-
-// ====================== FIREBASE - CLIENT ======================
-function scegliClient() {
-  const code = prompt("Inserisci il codice stanza dell'Host (6 caratteri):");
-  if (!code || code.trim().length < 4) {
-    alert("Codice non valido");
-    return;
-  }
-  roomCode = code.trim().toUpperCase();
-  roomRef = db.ref('rooms/' + roomCode);
-
-  roomRef.once('value').then((snap) => {
-    if (!snap.exists()) {
-      alert("Stanza non trovata. Controlla il codice.");
-      return;
-    }
-    mode = 'client';
-
-    roomRef.on('value', (snap) => {
-      const data = snap.val();
-      if (!data) return;
-      videos = data.videos || [];
-      aggiornaListaClient();
-    });
-
-    document.getElementById('modeScreen').style.display = 'none';
-    document.getElementById('clientPanel').style.display = 'block';
-    document.getElementById('clientRoomCode').textContent = roomCode;
-  });
-}
-
-function clientCmd(action) {
-  if (!roomRef) return;
-  roomRef.child('command').set(action);
-}
-
-function clientAggiungiVideo() {
-  const input = document.getElementById('clientYoutubeUrl');
-  const raw = input.value.trim();
-  if (!raw) return;
-
-  const urls = raw.split(/\s+/).filter(u => u);
-  const validUrls = [];
-
-  for (let url of urls) {
-    const id = estraiVideoId(url);
-    if (id) validUrls.push(url);
-  }
-
-  if (validUrls.length === 0) {
-    alert("Nessun link YouTube valido trovato");
-    return;
-  }
-
-  // Invia tutti i link in un solo comando
-  roomRef.child('command').set({ action: 'add', urls: validUrls });
-  input.value = '';
-}
-
-function aggiornaListaClient() {
-  const list = document.getElementById('clientVideoList');
-  list.innerHTML = videos.length === 0 ? '<p style="color:#888;text-align:center;padding:20px;">Nessun video sull\'Host</p>' : '';
-  videos.forEach((v, i) => {
-    const div = document.createElement('div');
-    div.className = 'video-item';
-    div.innerHTML = `<span><strong>${i+1}.</strong> ${v.url}</span> 
-      <button onclick="clientRimuovi(${i})">Elimina</button>`;
-    list.appendChild(div);
-  });
-}
-
-function clientRimuovi(index) {
-  roomRef.child('command').set({ action: 'remove', index: index });
-}
-
-function disconnettiClient() {
-  if (roomRef) roomRef.off();
-  location.reload();
-}
-
-// ====================== MODALITÀ SOLO ======================
-function scegliSolo() {
-  mode = 'solo';
-  document.getElementById('modeScreen').style.display = 'none';
-  document.getElementById('mainApp').style.display = 'block';
-}
-
-// ====================== YOUTUBE API ======================
-const tag = document.createElement('script');
-tag.src = "https://www.youtube.com/iframe_api";
-const firstScriptTag = document.getElementsByTagName('script')[0];
-firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-document.addEventListener('DOMContentLoaded', () => {
-  const urlInput = document.getElementById('youtubeUrl');
-  if (urlInput) {
-    urlInput.addEventListener('keypress', e => {
-      if (e.key === 'Enter') aggiungiVideo();
-    });
-  }
-  const clientInput = document.getElementById('clientYoutubeUrl');
-  if (clientInput) {
-    clientInput.addEventListener('keypress', e => {
-      if (e.key === 'Enter') clientAggiungiVideo();
-    });
-  }
-});
-</script>
-</body>
-</html>
