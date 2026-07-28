@@ -326,353 +326,500 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Flappy Bird Mobile</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube Multi - Host / Client</title>
 <style>
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: none;
-  }
-  html, body {
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: #70c5ce;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
-  #game-container {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    max-width: 480px;
-    margin: 0 auto;
-    overflow: hidden;
-  }
-  canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(#70c5ce 70%, #ded895 70%);
-  }
-  #ui {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-  #score {
-    position: absolute;
-    top: 40px;
-    font-size: 48px;
-    font-weight: 800;
-    color: white;
-    text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
-    z-index: 10;
-  }
-  #start-screen, #game-over {
-    background: rgba(0,0,0,0.55);
-    color: white;
-    padding: 30px 40px;
-    border-radius: 20px;
-    text-align: center;
-    pointer-events: auto;
-    max-width: 90%;
-  }
-  #start-screen h1, #game-over h1 {
-    font-size: 36px;
-    margin-bottom: 10px;
-    text-shadow: 2px 2px 0 #000;
-  }
-  #start-screen p, #game-over p {
-    font-size: 18px;
-    margin: 8px 0;
-    opacity: 0.95;
-  }
-  .btn {
-    display: inline-block;
-    margin-top: 20px;
-    padding: 14px 32px;
-    background: #f7d51d;
-    color: #333;
-    font-size: 20px;
-    font-weight: 700;
-    border: none;
-    border-radius: 50px;
-    box-shadow: 0 4px 0 #c9a00d;
-    cursor: pointer;
-    pointer-events: auto;
-  }
-  .btn:active {
-    transform: translateY(3px);
-    box-shadow: 0 1px 0 #c9a00d;
-  }
-  #best {
-    font-size: 16px;
-    margin-top: 12px;
-    opacity: 0.9;
-  }
-  .hidden {
-    display: none !important;
-  }
+  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1100px; margin: 40px auto; padding: 20px; background: #f8f9fa; }
+  h1 { text-align: center; color: #ff0000; }
+  .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+  input { width: 70%; padding: 12px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px; }
+  button { padding: 12px 20px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; margin: 4px; }
+  .btn-add { background: #28a745; color: white; }
+  .btn-clear { background: #dc3545; color: white; }
+  .btn-host { background: #007bff; color: white; }
+  .btn-client { background: #6f42c1; color: white; }
+  .btn-solo { background: #6c757d; color: white; }
+  .btn-ctrl { background: #17a2b8; color: white; }
+  .list { margin: 20px 0; max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px; }
+  .video-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; margin: 6px 0; background: #f8f9fa; border-radius: 6px; }
+  .preview-container { margin: 25px 0; padding: 15px; background: #000; border-radius: 12px; text-align: center; }
+  .preview-title { color: white; margin-bottom: 10px; }
+  .video-wrapper { position: relative; margin-bottom: 30px; }
+  .video-number { position: absolute; top: -12px; left: 15px; background: #ff0000; color: white; font-weight: bold; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 10; font-size: 18px; box-shadow: 0 3px 8px rgba(0,0,0,0.4); }
+  iframe { width: 100%; max-width: 800px; height: 450px; border-radius: 8px; }
+  textarea { width: 100%; height: 220px; font-family: monospace; margin-top: 10px; }
+  .mode-screen { text-align: center; padding: 40px 20px; }
+  .mode-screen button { display: block; width: 280px; margin: 15px auto; font-size: 18px; }
+  .code-box { font-size: 32px; font-weight: bold; letter-spacing: 6px; background: #222; color: #0f0; padding: 15px 30px; border-radius: 10px; display: inline-block; margin: 15px 0; }
+  .status { padding: 10px; border-radius: 8px; margin: 10px 0; text-align: center; font-weight: bold; }
+  .status.host { background: #d4edda; color: #155724; }
+  .status.client { background: #cce5ff; color: #004085; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 15px 0; }
+  #clientPanel { display: none; }
 </style>
 </head>
 <body>
-<div id="game-container">
-  <canvas id="canvas"></canvas>
-  <div id="ui">
-    <div id="score">0</div>
-    <div id="start-screen">
-      <h1>🐦 Flappy Bird</h1>
-      <p>Tocca lo schermo per volare</p>
-      <p>Evita i tubi!</p>
-      <button class="btn" id="start-btn">GIOCA</button>
+<div class="container">
+
+  <!-- SCHERMATA INIZIALE -->
+  <div id="modeScreen" class="mode-screen">
+    <h1>🎥 YouTube Multi</h1>
+    <p style="font-size:18px; margin-bottom:30px;">Scegli come vuoi usare l'app</p>
+    <button class="btn-host" onclick="scegliHost()">🖥️ Diventa HOST</button>
+    <button class="btn-client" onclick="scegliClient()">📱 Diventa CLIENT (controlla da remoto)</button>
+    <button class="btn-solo" onclick="scegliSolo()">🔓 Accedi senza client</button>
+  </div>
+
+  <!-- SCHERMATA HOST / SOLO -->
+  <div id="mainApp" style="display:none;">
+    <h1>🎥 YouTube Multi - Riproduzione Automatica</h1>
+
+    <div id="hostStatus" class="status host" style="display:none;">
+      Sei l'<strong>HOST</strong> — Codice stanza: <span class="code-box" id="roomCodeDisplay"></span><br>
+      Condividi questo codice con il Client. Il Client può controllare tutto.
+      <br><button class="btn-solo" onclick="disconnettiHost()" style="margin-top:10px;">Esci dalla modalità Host</button>
     </div>
-    <div id="game-over" class="hidden">
-      <h1>Game Over</h1>
-      <p>Punteggio: <span id="final-score">0</span></p>
-      <p id="best">Record: 0</p>
-      <button class="btn" id="restart-btn">RIPROVA</button>
+
+    <div>
+      <input type="text" id="youtubeUrl" placeholder="Inserisci link YouTube... (puoi separare più link con spazi)" />
+      <button class="btn-add" onclick="aggiungiVideo()">➕ Aggiungi</button>
+    </div>
+    <div class="list" id="videoList"></div>
+    <button class="btn-clear" onclick="cancellaTutti()">🗑️ Cancella Tutti</button>
+
+    <!-- Controlli player (visibili anche all'host) -->
+    <div class="controls" id="playerControls" style="display:none;">
+      <button class="btn-ctrl" onclick="cmdPlay()">▶️ Play</button>
+      <button class="btn-ctrl" onclick="cmdPause()">⏸️ Pausa</button>
+      <button class="btn-ctrl" onclick="cmdPrev()">⏮️ Precedente</button>
+      <button class="btn-ctrl" onclick="cmdNext()">⏭️ Successivo</button>
+    </div>
+
+    <div id="result" style="display:none;">
+      <div class="preview-container">
+        <div class="preview-title"><strong>Anteprima - Riproduzione Sequenziale Automatica</strong></div>
+        <div id="mainPlayer"></div>
+      </div>
+      <h3>Video numerati (anteprima separata):</h3>
+      <div class="preview" id="previewContainer"></div>
+      <h3>Codice HTML:</h3>
+      <textarea id="iframeCode" readonly></textarea>
+      <button onclick="copiaCodice()">📋 Copia Codice</button>
     </div>
   </div>
+
+  <!-- SCHERMATA CLIENT -->
+  <div id="clientPanel" style="display:none;">
+    <h1>📱 Client - Controllo remoto</h1>
+    <div class="status client">
+      Collegato alla stanza: <strong id="clientRoomCode"></strong>
+      <br><button class="btn-solo" onclick="disconnettiClient()" style="margin-top:8px;">Esci</button>
+    </div>
+
+    <div>
+      <input type="text" id="clientYoutubeUrl" placeholder="Inserisci link YouTube da aggiungere..." />
+      <button class="btn-add" onclick="clientAggiungiVideo()">➕ Aggiungi sul Host</button>
+    </div>
+
+    <div class="list" id="clientVideoList"></div>
+
+    <div class="controls">
+      <button class="btn-ctrl" onclick="clientCmd('play')">▶️ Play</button>
+      <button class="btn-ctrl" onclick="clientCmd('pause')">⏸️ Pausa</button>
+      <button class="btn-ctrl" onclick="clientCmd('prev')">⏮️ Precedente</button>
+      <button class="btn-ctrl" onclick="clientCmd('next')">⏭️ Successivo</button>
+      <button class="btn-clear" onclick="clientCmd('clear')">🗑️ Cancella Tutti</button>
+    </div>
+
+    <p style="text-align:center; color:#666; margin-top:20px;">
+      I video vengono riprodotti solo sull'Host. Qui controlli tutto da remoto.
+    </p>
+  </div>
+
 </div>
 
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
 <script>
-(function() {
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  const scoreEl = document.getElementById('score');
-  const startScreen = document.getElementById('start-screen');
-  const gameOverScreen = document.getElementById('game-over');
-  const finalScoreEl = document.getElementById('final-score');
-  const bestEl = document.getElementById('best');
-  const startBtn = document.getElementById('start-btn');
-  const restartBtn = document.getElementById('restart-btn');
+// ====================== FIREBASE CONFIG ======================
+const firebaseConfig = {
+  apiKey: "AIzaSyD9475t0lxm7FVKnkqSkMzktbZzeP9U2Rk",
+  authDomain: "youtubiframe.firebaseapp.com",
+  databaseURL: "https://youtubiframe-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "youtubiframe",
+  storageBucket: "youtubiframe.firebasestorage.app",
+  messagingSenderId: "1078767228795",
+  appId: "1:1078767228795:web:11ce90d56cb78308ab8fde"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-  let W, H, scale;
-  let bird, pipes, score, best, gravity, velocity, gameState; // 'start' | 'playing' | 'over'
-  let pipeGap, pipeWidth, pipeSpeed, frame;
+// ====================== STATO GLOBALE ======================
+let videos = [];
+let player = null;
+let mode = null;          // 'host' | 'client' | 'solo'
+let roomCode = null;
+let roomRef = null;
+let isApplyingRemote = false; // evita loop
 
-  function resize() {
-    const container = document.getElementById('game-container');
-    W = container.clientWidth;
-    H = container.clientHeight;
-    canvas.width = W;
-    canvas.height = H;
-    scale = Math.min(W / 360, H / 640);
-    pipeGap = 160 * scale;
-    pipeWidth = 70 * scale;
-    pipeSpeed = 2.8 * scale;
+// ====================== FUNZIONI ORIGINALI (invariate) ======================
+function estraiVideoId(url) {
+  url = url.trim();
+  const regex = [
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/,
+    /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/,
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/,
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([^?]+)/
+  ];
+  for (let r of regex) {
+    const m = url.match(r);
+    if (m && m[1]) return m[1];
+  }
+  return null;
+}
+
+function aggiungiVideo() {
+  const input = document.getElementById('youtubeUrl');
+  let urls = input.value.trim().split(/\s+/);
+  let added = 0;
+  let skipped = 0;
+
+  for (let url of urls) {
+    if (!url) continue;
+    const id = estraiVideoId(url);
+    if (!id) { skipped++; continue; }
+    if (videos.some(v => v.id === id)) { skipped++; continue; }
+    videos.push({ id: id, url: url });
+    added++;
   }
 
-  function reset() {
-    bird = {
-      x: W * 0.28,
-      y: H * 0.45,
-      radius: 18 * scale,
-      velocity: 0
-    };
-    pipes = [];
-    score = 0;
-    gravity = 0.35 * scale;
-    velocity = -7.5 * scale;
-    frame = 0;
-    scoreEl.textContent = '0';
-  }
+  input.value = '';
 
-  function spawnPipe() {
-    const minTop = 80 * scale;
-    const maxTop = H - pipeGap - 120 * scale;
-    const topHeight = minTop + Math.random() * (maxTop - minTop);
-    pipes.push({
-      x: W + 10,
-      top: topHeight,
-      bottom: topHeight + pipeGap,
-      scored: false
-    });
-  }
-
-  function drawBird() {
-    // corpo
-    ctx.beginPath();
-    ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#f7d51d';
-    ctx.fill();
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 2 * scale;
-    ctx.stroke();
-
-    // occhio
-    ctx.beginPath();
-    ctx.arc(bird.x + 6 * scale, bird.y - 4 * scale, 5 * scale, 0, Math.PI * 2);
-    ctx.fillStyle = '#fff';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(bird.x + 7 * scale, bird.y - 4 * scale, 2.5 * scale, 0, Math.PI * 2);
-    ctx.fillStyle = '#000';
-    ctx.fill();
-
-    // becco
-    ctx.beginPath();
-    ctx.moveTo(bird.x + bird.radius - 2 * scale, bird.y);
-    ctx.lineTo(bird.x + bird.radius + 12 * scale, bird.y - 4 * scale);
-    ctx.lineTo(bird.x + bird.radius + 12 * scale, bird.y + 4 * scale);
-    ctx.closePath();
-    ctx.fillStyle = '#e67e22';
-    ctx.fill();
-  }
-
-  function drawPipes() {
-    pipes.forEach(p => {
-      // tubo superiore
-      ctx.fillStyle = '#2ecc71';
-      ctx.fillRect(p.x, 0, pipeWidth, p.top);
-      ctx.fillStyle = '#27ae60';
-      ctx.fillRect(p.x - 4 * scale, p.top - 25 * scale, pipeWidth + 8 * scale, 25 * scale);
-
-      // tubo inferiore
-      ctx.fillStyle = '#2ecc71';
-      ctx.fillRect(p.x, p.bottom, pipeWidth, H - p.bottom);
-      ctx.fillStyle = '#27ae60';
-      ctx.fillRect(p.x - 4 * scale, p.bottom, pipeWidth + 8 * scale, 25 * scale);
-
-      // bordo
-      ctx.strokeStyle = '#1e8449';
-      ctx.lineWidth = 3 * scale;
-      ctx.strokeRect(p.x, 0, pipeWidth, p.top);
-      ctx.strokeRect(p.x, p.bottom, pipeWidth, H - p.bottom);
-    });
-  }
-
-  function drawGround() {
-    ctx.fillStyle = '#ded895';
-    ctx.fillRect(0, H - 40 * scale, W, 40 * scale);
-    ctx.fillStyle = '#c9b66b';
-    for (let i = 0; i < W; i += 30 * scale) {
-      ctx.fillRect(i, H - 40 * scale, 15 * scale, 8 * scale);
+  if (added > 0) {
+    aggiornaTutto();
+    if (mode === 'host') syncToFirebase();
+    if (added + skipped > 1) {
+      alert(`Aggiunti ${added} video${skipped > 0 ? ` (${skipped} saltati)` : ''}.`);
     }
+  } else if (skipped > 0) {
+    alert("Nessun nuovo video valido da aggiungere.");
   }
+}
 
-  function update() {
-    if (gameState !== 'playing') return;
+function rimuoviVideo(index) {
+  videos.splice(index, 1);
+  aggiornaTutto();
+  if (mode === 'host') syncToFirebase();
+}
 
-    bird.velocity += gravity;
-    bird.y += bird.velocity;
+function aggiornaTutto() {
+  aggiornaLista();
+  aggiornaAnteprimaSeparata();
+  document.getElementById('result').style.display = videos.length > 0 ? 'block' : 'none';
+  document.getElementById('playerControls').style.display = videos.length > 0 ? 'flex' : 'none';
+  if (videos.length > 0) {
+    caricaPlayerPrincipale();
+  }
+}
 
-    // collisione con suolo/cielo
-    if (bird.y + bird.radius > H - 40 * scale || bird.y - bird.radius < 0) {
-      endGame();
-      return;
+function aggiornaLista() {
+  const list = document.getElementById('videoList');
+  list.innerHTML = videos.length === 0 ? '<p style="color:#888;text-align:center;padding:20px;">Nessun video</p>' : '';
+  videos.forEach((v, i) => {
+    const div = document.createElement('div');
+    div.className = 'video-item';
+    div.innerHTML = `<span><strong>${i+1}.</strong> ${v.url}</span> <button onclick="rimuoviVideo(${i})">Elimina</button>`;
+    list.appendChild(div);
+  });
+}
+
+function aggiornaAnteprimaSeparata() {
+  const container = document.getElementById('previewContainer');
+  container.innerHTML = '';
+  videos.forEach((v, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'video-wrapper';
+    wrap.innerHTML = `
+      <div class="video-number">${i+1}</div>
+      <iframe src="https://www.youtube.com/embed/${v.id}" frameborder="0" allowfullscreen></iframe>
+    `;
+    container.appendChild(wrap);
+  });
+}
+
+function caricaPlayerPrincipale() {
+  if (player) {
+    try { player.destroy(); } catch(e){}
+    player = null;
+  }
+  if (videos.length === 0) return;
+
+  const firstId = videos[0].id;
+  const playlistIds = videos.map(v => v.id).join(',');
+  player = new YT.Player('mainPlayer', {
+    height: '450',
+    width: '800',
+    videoId: firstId,
+    playerVars: {
+      'autoplay': 1,
+      'playlist': playlistIds,
+      'loop': 0,
+      'rel': 0,
+      'modestbranding': 1
+    },
+    events: {
+      'onReady': (e) => e.target.playVideo()
     }
+  });
+}
 
-    // muovi tubi
-    for (let i = pipes.length - 1; i >= 0; i--) {
-      const p = pipes[i];
-      p.x -= pipeSpeed;
-
-      // collisione
-      if (
-        bird.x + bird.radius > p.x &&
-        bird.x - bird.radius < p.x + pipeWidth &&
-        (bird.y - bird.radius < p.top || bird.y + bird.radius > p.bottom)
-      ) {
-        endGame();
-        return;
-      }
-
-      // punteggio
-      if (!p.scored && p.x + pipeWidth < bird.x) {
-        p.scored = true;
-        score++;
-        scoreEl.textContent = score;
-      }
-
-      // rimuovi tubi fuori schermo
-      if (p.x + pipeWidth < 0) {
-        pipes.splice(i, 1);
-      }
-    }
-
-    // genera nuovi tubi
-    frame++;
-    if (frame % Math.floor(90 / (scale * 0.9)) === 0) {
-      spawnPipe();
-    }
+function generaCodice() {
+  let html = '';
+  videos.forEach((v, i) => {
+    html += `<iframe width="560" height="315" src="https://www.youtube.com/embed/${v.id}" title="Video ${i+1}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>\n\n`;
+  });
+  if (videos.length > 1) {
+    const playlist = videos.map(v => v.id).join(',');
+    html += `<!-- Versione Playlist (migliore per riproduzione automatica) -->\n`;
+    html += `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videos[0].id}?playlist=${playlist}&autoplay=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
   }
+  return html;
+}
 
-  function draw() {
-    ctx.clearRect(0, 0, W, H);
-    drawPipes();
-    drawGround();
-    drawBird();
+function copiaCodice() {
+  document.getElementById('iframeCode').value = generaCodice();
+  const textarea = document.getElementById('iframeCode');
+  textarea.select();
+  document.execCommand('copy');
+  const btn = event.target;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '✅ Copiato!';
+  setTimeout(() => btn.innerHTML = orig, 2000);
+}
+
+function cancellaTutti() {
+  if (confirm("Cancella tutti i video?")) {
+    videos = [];
+    aggiornaTutto();
+    if (mode === 'host') syncToFirebase();
   }
+}
 
-  function loop() {
-    update();
-    draw();
-    requestAnimationFrame(loop);
-  }
+// ====================== CONTROLLI PLAYER ======================
+function cmdPlay() {
+  if (player && player.playVideo) player.playVideo();
+  if (mode === 'host') syncCommand('play');
+}
+function cmdPause() {
+  if (player && player.pauseVideo) player.pauseVideo();
+  if (mode === 'host') syncCommand('pause');
+}
+function cmdNext() {
+  if (player && player.nextVideo) player.nextVideo();
+  if (mode === 'host') syncCommand('next');
+}
+function cmdPrev() {
+  if (player && player.previousVideo) player.previousVideo();
+  if (mode === 'host') syncCommand('prev');
+}
 
-  function flap() {
-    if (gameState === 'playing') {
-      bird.velocity = velocity;
-    }
-  }
+// ====================== FIREBASE - HOST ======================
+function generaRoomCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+  return code;
+}
 
-  function startGame() {
-    reset();
-    gameState = 'playing';
-    startScreen.classList.add('hidden');
-    gameOverScreen.classList.add('hidden');
-    spawnPipe();
-  }
+function scegliHost() {
+  mode = 'host';
+  roomCode = generaRoomCode();
+  roomRef = db.ref('rooms/' + roomCode);
 
-  function endGame() {
-    gameState = 'over';
-    finalScoreEl.textContent = score;
-    if (score > best) {
-      best = score;
-      localStorage.setItem('flappyBest', best);
-    }
-    bestEl.textContent = 'Record: ' + best;
-    gameOverScreen.classList.remove('hidden');
-  }
-
-  // Eventi touch e mouse
-  function handleInput(e) {
-    e.preventDefault();
-    if (gameState === 'playing') {
-      flap();
-    }
-  }
-
-  canvas.addEventListener('touchstart', handleInput, { passive: false });
-  canvas.addEventListener('mousedown', handleInput);
-
-  startBtn.addEventListener('click', startGame);
-  restartBtn.addEventListener('click', startGame);
-
-  // init
-  best = parseInt(localStorage.getItem('flappyBest') || '0');
-  bestEl.textContent = 'Record: ' + best;
-  resize();
-  reset();
-  gameState = 'start';
-  window.addEventListener('resize', () => {
-    resize();
-    if (gameState === 'start') reset();
+  // Crea la stanza
+  roomRef.set({
+    videos: [],
+    command: null,
+    hostOnline: true,
+    updatedAt: Date.now()
   });
 
-  loop();
-})();
+  // Ascolta i comandi dal client
+  roomRef.child('command').on('value', (snap) => {
+    const cmd = snap.val();
+    if (!cmd || isApplyingRemote) return;
+    eseguiComandoRemoto(cmd);
+    // Azzera il comando dopo averlo eseguito
+    roomRef.child('command').set(null);
+  });
+
+  // Ascolta cambiamenti lista (se il client aggiunge)
+  roomRef.child('videos').on('value', (snap) => {
+    if (isApplyingRemote) return;
+    const remoteVideos = snap.val() || [];
+    if (JSON.stringify(remoteVideos) !== JSON.stringify(videos)) {
+      isApplyingRemote = true;
+      videos = remoteVideos;
+      aggiornaTutto();
+      isApplyingRemote = false;
+    }
+  });
+
+  // Mostra UI
+  document.getElementById('modeScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('hostStatus').style.display = 'block';
+  document.getElementById('roomCodeDisplay').textContent = roomCode;
+}
+
+function syncToFirebase() {
+  if (mode !== 'host' || !roomRef) return;
+  isApplyingRemote = true;
+  roomRef.update({
+    videos: videos,
+    updatedAt: Date.now()
+  }).then(() => { isApplyingRemote = false; });
+}
+
+function syncCommand(cmd) {
+  if (mode !== 'host' || !roomRef) return;
+  // non serve, i comandi partono dal client
+}
+
+function eseguiComandoRemoto(cmd) {
+  if (!cmd) return;
+  if (cmd === 'play') cmdPlay();
+  else if (cmd === 'pause') cmdPause();
+  else if (cmd === 'next') cmdNext();
+  else if (cmd === 'prev') cmdPrev();
+  else if (cmd === 'clear') {
+    videos = [];
+    aggiornaTutto();
+    syncToFirebase();
+  }
+  else if (typeof cmd === 'object') {
+    if (cmd.action === 'add' && cmd.url) {
+      const id = estraiVideoId(cmd.url);
+      if (id && !videos.some(v => v.id === id)) {
+        videos.push({ id, url: cmd.url });
+        aggiornaTutto();
+        syncToFirebase();
+      }
+    }
+    else if (cmd.action === 'remove' && typeof cmd.index === 'number') {
+      if (cmd.index >= 0 && cmd.index < videos.length) {
+        videos.splice(cmd.index, 1);
+        aggiornaTutto();
+        syncToFirebase();
+      }
+    }
+  }
+}
+
+function disconnettiHost() {
+  if (roomRef) {
+    roomRef.child('hostOnline').set(false);
+    roomRef.off();
+  }
+  location.reload();
+}
+
+// ====================== FIREBASE - CLIENT ======================
+function scegliClient() {
+  const code = prompt("Inserisci il codice stanza dell'Host (6 caratteri):");
+  if (!code || code.trim().length < 4) {
+    alert("Codice non valido");
+    return;
+  }
+  roomCode = code.trim().toUpperCase();
+  roomRef = db.ref('rooms/' + roomCode);
+
+  // Verifica che la stanza esista
+  roomRef.once('value').then((snap) => {
+    if (!snap.exists()) {
+      alert("Stanza non trovata. Controlla il codice.");
+      return;
+    }
+    mode = 'client';
+
+    // Ascolta lo stato dell'host
+    roomRef.on('value', (snap) => {
+      const data = snap.val();
+      if (!data) return;
+      videos = data.videos || [];
+      aggiornaListaClient();
+    });
+
+    // Mostra UI client
+    document.getElementById('modeScreen').style.display = 'none';
+    document.getElementById('clientPanel').style.display = 'block';
+    document.getElementById('clientRoomCode').textContent = roomCode;
+  });
+}
+
+function clientCmd(action) {
+  if (!roomRef) return;
+  roomRef.child('command').set(action);
+}
+
+function clientAggiungiVideo() {
+  const input = document.getElementById('clientYoutubeUrl');
+  const url = input.value.trim();
+  if (!url) return;
+  const id = estraiVideoId(url);
+  if (!id) {
+    alert("Link YouTube non valido");
+    return;
+  }
+  roomRef.child('command').set({ action: 'add', url: url });
+  input.value = '';
+}
+
+function aggiornaListaClient() {
+  const list = document.getElementById('clientVideoList');
+  list.innerHTML = videos.length === 0 ? '<p style="color:#888;text-align:center;padding:20px;">Nessun video sull\'Host</p>' : '';
+  videos.forEach((v, i) => {
+    const div = document.createElement('div');
+    div.className = 'video-item';
+    div.innerHTML = `<span><strong>${i+1}.</strong> ${v.url}</span> 
+      <button onclick="clientRimuovi(${i})">Elimina</button>`;
+    list.appendChild(div);
+  });
+}
+
+function clientRimuovi(index) {
+  roomRef.child('command').set({ action: 'remove', index: index });
+}
+
+function disconnettiClient() {
+  if (roomRef) roomRef.off();
+  location.reload();
+}
+
+// ====================== MODALITÀ SOLO (originale) ======================
+function scegliSolo() {
+  mode = 'solo';
+  document.getElementById('modeScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+}
+
+// ====================== YOUTUBE API ======================
+const tag = document.createElement('script');
+tag.src = "https://www.youtube.com/iframe_api";
+const firstScriptTag = document.getElementsByTagName('script')[0];
+firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+// Tasto Enter
+document.addEventListener('DOMContentLoaded', () => {
+  const urlInput = document.getElementById('youtubeUrl');
+  if (urlInput) {
+    urlInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') aggiungiVideo();
+    });
+  }
+});
 </script>
 </body>
 </html>
